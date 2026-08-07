@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hermes Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.1/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.1/highlight.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        :root {
+            --bg-color: #0a0a0c;
+            --card-bg: rgba(23, 23, 26, 0.8);
+            --accent: #3b82f6;
+            --text-main: #e4e4e7;
+            --text-muted: #a1a1aa;
+            --agent-bubble: rgba(30, 41, 59, 0.6);
+            --user-bubble: rgba(59, 130, 246, 0.15);
+        }
+
+        .theme-cyberpunk {
+            --bg-color: #0d0221;
+            --card-bg: rgba(36, 0, 69, 0.8);
+            --accent: #ff00ff;
+            --text-main: #00f3ff;
+            --text-muted: #7000ff;
+            --agent-bubble: rgba(60, 0, 100, 0.6);
+            --user-bubble: rgba(255, 0, 255, 0.15);
+        }
+
+        .theme-nordic {
+            --bg-color: #2e3440;
+            --card-bg: rgba(49, 50, 60, 0.8);
+            --accent: #88c0d0;
+            --text-main: #eceff4;
+            --text-muted: #d8dee9;
+            --agent-bubble: rgba(50, 50, 60, 0.6);
+            --user-bubble: rgba(136, 192, 208, 0.15);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            transition: background-color 0.3s ease;
+        }
+
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+        }
+
+        .model-card.active {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--accent);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .chat-bubble {
+            max-width: 85%;
+            padding: 14px 18px;
+            border-radius: 18px;
+            margin-bottom: 12px;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            word-wrap: break-word;
+            position: relative;
+        }
+
+        .agent-msg {
+            background: var(--agent-bubble);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            gap: 12px;
+        }
+
+        .user-msg {
+            background: var(--user-bubble);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        pre {
+            background: #1e1e1e !important;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        #chat-window::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-window::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .avatar-thumb {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--accent);
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-6">
+        <div class="flex items-center gap-4">
+            <img id="header-agent-avatar" src="https://hermes-agent.nousresearch.com/static/logo.png" class="w-10 h-10 rounded-full border-2 border-blue-500" alt="Agent">
+            <div class="flex flex-col">
+                <h1 class="text-2xl font-bold tracking-tighter">HERMES <span class="text-blue-500">COMMAND</span></h1>
+                <p class="text-xs text-zinc-500">Local Infrastructure Active</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span class="text-xs text-green-500">LITELLM ONLINE</span>
+            </div>
+            <button onclick="toggleSettings()" class="text-zinc-400 hover:text-white transition-colors">
+                <i class="fas fa-cog text-xl"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-[1600px] mx-auto">
+        <!-- Sidebar -->
+        <div class="lg:col-span-3 space-y-6">
+            <div class="glass-card p-6">
+                <h2 class="text-sm font-semibold text-zinc-400 mb-4 uppercase tracking-widest">Model Routing</h2>
+                <div class="space-y-3">
+                    <button onclick="switchModel('chat')" id="btn-chat" class="w-full text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition-all">
+                        <div class="font-semibold">Chat</div>
+                        <div class="text-xs text-zinc-500">Gemma-4 (12B)</div>
+                    </button>
+                    <button onclick="switchModel('coder')" id="btn-coder" class="w-full text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition-all">
+                        <div class="font-semibold">Coder</div>
+                        <div class="text-xs text-zinc-500">Qwen 2.5 (14B)</div>
+                    </button>
+                    <button onclick="switchModel('reasoning')" id="btn-reasoning" class="w-full text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition-all">
+                        <div class="font-semibold">Reasoning</div>
+                        <div class="text-xs text-zinc-500">Ministral-3 (14B)</div>
+                    </button>
+                    <button onclick="switchModel('deep-logic')" id="btn-deep-logic" class="w-full text-left px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition-all">
+                        <div class="font-semibold">Deep Logic</div>
+                        <div class="text-xs text-zinc-500">Ternary Bonsai (27B)</div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass-card p-6">
+                <h2 class="text-sm font-semibold text-zinc-400 mb-4 uppercase tracking-widest">Quick Actions</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="quickAction('coder')" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg text-xs font-bold">CODE MODE</button>
+                    <button onclick="quickAction('reasoning')" class="bg-purple-600 hover:bg-purple-500 text-white p-2 rounded-lg text-xs font-bold">RESEARCH</button>
+                    <button onclick="quickAction('chat')" class="bg-zinc-700 hover:bg-zinc-600 text-white p-2 rounded-lg text-xs font-bold">CLEANUP</button>
+                    <button onclick="location.reload()" class="bg-red-900/30 hover:bg-red-900/50 text-red-400 p-2 rounded-lg text-xs font-bold">REBOOT</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Area -->
+        <div class="lg:col-span-9 space-y-6">
+            <div class="glass-card flex flex-col h-[75vh]">
+                <!-- Chat Header -->
+                <div class="p-4 border-b border-white/5 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <span class="relative flex h-3 w-3">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                        </span>
+                        <span class="text-sm font-semibold">Active: <span id="active-model-label" class="text-blue-500">chat</span></span>
+                    </div>
+                    <div class="text-xs font-mono text-zinc-500">v0.20.0</div>
+                </div>
+
+                <!-- Chat Window -->
+                <div id="chat-window" class="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+                    <div class="agent-msg chat-bubble">
+                        Hello! I am the Hermes Agent. I'm ready to help you with coding, research, or general chat. Which mode would you like to start with?
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-6 bg-black/20 border-t border-white/5">
+                    <div class="relative max-w-4xl mx-auto">
+                        <textarea id="user-input" 
+                                  class="w-full bg-zinc-900 border border-white/10 rounded-2xl p-4 pr-16 text-white outline-none focus:border-blue-500 transition-colors resize-none"
+                                  rows="1"
+                                  placeholder="Message Hermes..."></textarea>
+                        <button id="send-btn" class="absolute right-3 bottom-3 p-2 bg-blue-600 rounded-xl hover:bg-blue-500 transition-colors">
+                            <i class="fas fa-paper-plane text-white"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[10000] p-4">
+        <div class="glass-card w-full max-w-2xl p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Settings</h2>
+                <button onclick="toggleSettings()" class="text-zinc-400 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="space-y-8">
+                <section>
+                    <h3 class="text-sm font-semibold text-zinc-400 mb-4 uppercase tracking-widest">Profile & Appearance</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs text-zinc-500 mb-1">User Profile Image URL</label>
+                            <input type="text" id="profile-img-input" class="w-full bg-zinc-900 border border-white/10 rounded p-2 text-sm" placeholder="https://...">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-zinc-500 mb-1">Agent Avatar URL</label>
+                            <input type="text" id="agent-avatar-input" class="w-full bg-zinc-900 border border-white/10 rounded p-2 text-sm" placeholder="https://...">
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h3 class="text-sm font-semibold text-zinc-400 mb-4 uppercase tracking-widest">Theme & Style</h3>
+                    <div class="flex gap-4">
+                        <button onclick="setTheme('default')" class="px-4 py-2 rounded bg-zinc-800 border border-white/10 hover:border-blue-500">Midnight</button>
+                        <button onclick="setTheme('cyberpunk')" class="px-4 py-2 rounded bg-zinc-800 border border-white/10 hover:border-purple-500">Cyberpunk</button>
+                        <button onclick="setTheme('nordic')" class="px-4 py-2 rounded bg-zinc-800 border border-white/10 hover:border-blue-400">Nordic</button>
+                    </div>
+                </section>
+
+                <section>
+                    <h3 class="text-sm font-semibold text-zinc-400 mb-4 uppercase tracking-widest">Custom CSS</h3>
+                    <textarea id="custom-css-input" class="w-full h-32 bg-black/40 border border-white/10 rounded p-4 terminal-font text-xs text-zinc-400" placeholder="/* Example: .glass-card { border-radius: 0px; } */"></textarea>
+                    <button onclick="applyCustomCSS()" class="mt-2 text-xs text-blue-500 hover:underline">Apply Custom CSS</button>
+                </section>
+
+                <section>
+                    <h3 class="text-sm font-semibold text-zinc-400 mb-4 uppercase tracking-widest">Diagnostics</h3>
+                    <div class="bg-black/20 p-4 rounded border border-white/5 text-xs font-mono">
+                        <div id="debug-info">Initializing logs...</div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let config = {
+            theme: 'default',
+            userProfileImg: 'https://hermes-agent.nousresearch.com/static/logo.png',
+            agentAvatar: 'https://hermes-agent.nousresearch.com/static/logo.png',
+            customCss: ''
+        };
+
+        if (localStorage.getItem('hermes_config')) {
+            config = JSON.parse(localStorage.getItem('hermes_config'));
+            setTheme(config.theme);
+            document.getElementById('profile-img-input').value = config.userProfileImg;
+            document.getElementById('agent-avatar-input').value = config.agentAvatar;
+            document.getElementById('custom-css-input').value = config.customCss;
+            document.getElementById('user-profile-pic').src = config.userProfileImg;
+            document.getElementById('header-agent-avatar').src = config.agentAvatar;
+        }
+
+        function toggleSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        function setTheme(theme) {
+            config.theme = theme;
+            document.body.classList.remove('theme-cyberpunk', 'theme-nordic');
+            if (theme !== 'default') {
+                document.body.classList.add(`theme-${theme}`);
+            }
+            saveConfig();
+        }
+
+        function applyCustomCSS() {
+            const css = document.getElementById('custom-css-input').value;
+            config.customCss = css;
+            document.getElementById('user-custom-css').innerHTML = css;
+        }
+
+        function saveConfig() {
+            localStorage.setItem('hermes_config', JSON.stringify(config));
+        }
+
+        // Listen for Profile Image changes
+        document.getElementById('profile-img-input').addEventListener('change', (e) => {
+            config.userProfileImg = e.target.value;
+            document.getElementById('user-profile-pic').src = config.userProfileImg;
+            saveConfig();
+        });
+
+        document.getElementById('agent-avatar-input').addEventListener('change', (e) => {
+            config.agentAvatar = e.target.value;
+            document.getElementById('header-agent-avatar').src = config.agentAvatar;
+            saveConfig();
+        });
+
+        function switchModel(modelId) {
+            document.querySelectorAll('button[onclick^="switchModel"]').forEach(btn => {
+                btn.classList.remove('active', 'border-blue-500');
+                btn.classList.add('bg-zinc-800');
+            });
+            
+            const activeBtn = document.getElementById(`btn-${modelId}`);
+            if (activeBtn) {
+                activeBtn.classList.add('active', 'border-blue-500');
+                activeBtn.classList.remove('bg-zinc-800');
+            }
+            
+            document.getElementById('active-model-label').innerText = modelId;
+
+            try {
+                const response = await fetch('http://127.0.0.1:8080/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: modelId })
+                });
+                const data = await response.json();
+                console.log('Switch Success:', data);
+            } catch (err) {
+                console.error('Failed to switch model via server:', err);
+            }
+        }
+
+        function quickAction(type) {
+            switchModel(type);
+        }
+
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        function appendMessage(role, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = role === 'user' ? 'user-msg chat-bubble' : 'agent-msg chat-bubble';
+            
+            if (role === 'agent') {
+                const avatar = document.createElement('img');
+                avatar.src = config.agentAvatar;
+                avatar.className = 'avatar-thumb';
+                msgDiv.appendChild(avatar);
+                msgDiv.appendChild(document.createElement('span')); // Spacer
+            } else {
+                // User message also gets a small avatar for balance
+                const avatar = document.createElement('img');
+                avatar.src = config.userProfileImg;
+                avatar.className = 'avatar-thumb';
+                msgDiv.appendChild(avatar);
+                msgDiv.appendChild(document.createElement('span')); // Spacer
+            }
+
+            const content = document.createElement('div');
+            content.innerHTML = marked.parse(text);
+            msgDiv.appendChild(content);
+
+            chatWindow.appendChild(msgDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+            
+            // Re-apply highlight.js
+            msgDiv.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+        }
+
+        function handleSendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            appendMessage('user', text);
+            userInput.value = '';
+
+            setTimeout(() => {
+                const modelName = document.getElementById('active-model-label').innerText;
+                appendMessage('agent', `I am processing your request using the ${modelName} model. [Awaiting response from local inference...]`);
+            }, 600);
+        }
+
+        sendBtn.addEventListener('click', handleSendMessage);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        });
+
+        setInterval(() => {
+            document.getElementById('debug-info').innerText = `
+                Host: ${window.location.hostname}
+                Status: Operational
+                Latency: 14ms
+                Memory: 1.2GB / 16GB
+            `;
+        }, 2000);
+    </script>
+</body
+</html>
